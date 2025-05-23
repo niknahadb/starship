@@ -16,7 +16,7 @@ import (
 	"golang.org/x/image/font/opentype"
 )
 
-//go:embed assets/* assets/meteors/*.png
+//go:embed assets
 var assets embed.FS
 
 var (
@@ -24,6 +24,7 @@ var (
     MeteorSprites []*ebiten.Image
     BulletSprite  *ebiten.Image
     ScoreFont     font.Face
+    GameOverFont  font.Face  // new: larger font for game over text
 )
 
 const (
@@ -85,6 +86,23 @@ func init() {
     BulletSprite = mustLoadImage("assets/bullet.png")
     MeteorSprites = mustLoadImages("assets/meteors")
     ScoreFont = mustLoadFont("assets/font.ttf")
+    // Load game over font with larger size
+    data, err := assets.ReadFile("assets/font.ttf")
+    if err != nil {
+        panic(err)
+    }
+    tt, err := opentype.Parse(data)
+    if err != nil {
+        panic(err)
+    }
+    GameOverFont, err = opentype.NewFace(tt, &opentype.FaceOptions{
+        Size:    72,
+        DPI:     72,
+        Hinting: font.HintingVertical,
+    })
+    if err != nil {
+        panic(err)
+    }
 }
 
 // Vector is a 2D point or direction.
@@ -154,6 +172,9 @@ type Game struct {
     meteors          []*Meteor
     bullets          []*Bullet
     score            int
+    difficultyLevel  int
+    isGameOver       bool    // new: track game over state
+    rainbowHue       float64 // new: for rainbow animation
 }
 
 func NewGame() *Game {
@@ -161,18 +182,33 @@ func NewGame() *Game {
         meteors: make([]*Meteor, 0),
         bullets: make([]*Bullet, 0),
     }
-    g.player = NewPlayer(g)
+    g.player = NewPlayer(g, 0)
     g.meteorSpawnTimer = NewTimer(1 * time.Second)
     return g
 }
 
 func (g *Game) Update() error {
-    g.player.Update()
+    if g.isGameOver {
+        // Update rainbow hue
+        g.rainbowHue += 0.01
+        if g.rainbowHue > 1.0 {
+            g.rainbowHue = 0
+        }
+        
+        // Check for space key to restart
+        if ebiten.IsKeyPressed(ebiten.KeySpace) {
+            g.Reset()
+        }
+        return nil
+    }
+
+    g.difficultyLevel = g.score / 10
+    g.player.Update(g.difficultyLevel)
 
     g.meteorSpawnTimer.Update()
     if g.meteorSpawnTimer.IsReady() {
         g.meteorSpawnTimer.Reset()
-        g.meteors = append(g.meteors, NewMeteor())
+        g.meteors = append(g.meteors, NewMeteor(g.difficultyLevel))
     }
 
     for _, m := range g.meteors {
@@ -186,15 +222,13 @@ func (g *Game) Update() error {
     for i := len(g.meteors) - 1; i >= 0; i-- {
         m := g.meteors[i]
         if m.Collider().Intersects(g.player.Collider()) {
-            g.Reset()
+            g.isGameOver = true
             return nil
         }
         for j := len(g.bullets) - 1; j >= 0; j-- {
             b := g.bullets[j]
             if m.Collider().Intersects(b.Collider()) {
-                // remove meteor
                 g.meteors = append(g.meteors[:i], g.meteors[i+1:]...)
-                // remove bullet
                 g.bullets = append(g.bullets[:j], g.bullets[j+1:]...)
                 g.score++
                 break
@@ -206,6 +240,26 @@ func (g *Game) Update() error {
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
+    if g.isGameOver {
+        // Draw game over screen
+        // Game Over text
+        text.Draw(screen, "GAME OVER", GameOverFont,
+            ScreenWidth/2-200, ScreenHeight/2-50, color.White)
+        
+        // Score text
+        text.Draw(screen, fmt.Sprintf("Score: %06d", g.score), ScoreFont,
+            ScreenWidth/2-100, ScreenHeight/2, color.White)
+        
+        // Rainbow "Try Again" text
+        r, g, b := hsvToRGB(g.rainbowHue, 1.0, 1.0)
+        rainbowColor := color.RGBA{r, g, b, 255}
+        
+        // Draw Try Again text with rainbow color
+        text.Draw(screen, "Try Again", ScoreFont,
+            ScreenWidth/2-80, ScreenHeight*3/4, rainbowColor)
+        return
+    }
+
     g.player.Draw(screen)
     for _, m := range g.meteors {
         m.Draw(screen)
@@ -223,11 +277,14 @@ func (g *Game) Layout(outW, outH int) (int, int) {
 }
 
 func (g *Game) Reset() {
-    g.player = NewPlayer(g)
+    g.player = NewPlayer(g, 0)
     g.meteors = g.meteors[:0]
     g.bullets = g.bullets[:0]
     g.meteorSpawnTimer.Reset()
     g.score = 0
+    g.difficultyLevel = 0
+    g.isGameOver = false
+    g.rainbowHue = 0
 }
 
 func (g *Game) AddBullet(b *Bullet) {
@@ -242,9 +299,11 @@ type Player struct {
     sprite        *ebiten.Image
     game          *Game
     shootCooldown *Timer
+    baseRotSpeed  float64
+    baseCooldown  time.Duration
 }
 
-func NewPlayer(g *Game) *Player {
+func NewPlayer(g *Game, difficulty int) *Player {
     sprite := PlayerSprite
     b := sprite.Bounds()
     halfW := float64(b.Dx()) / 2
@@ -253,17 +312,24 @@ func NewPlayer(g *Game) *Player {
         X: ScreenWidth/2 - halfW,
         Y: ScreenHeight/2 - halfH,
     }
+    baseRotSpeed := math.Pi / float64(ebiten.TPS())
+    baseCooldown := 300 * time.Millisecond
+    cooldown := baseCooldown
+    if difficulty > 0 {
+        cooldown = time.Duration(float64(baseCooldown) * math.Pow(0.92, float64(difficulty)))
+    }
     return &Player{
         position:      pos,
         sprite:        sprite,
         game:          g,
-        shootCooldown: NewTimer(300 * time.Millisecond),
+        shootCooldown: NewTimer(cooldown),
+        baseRotSpeed:  baseRotSpeed,
+        baseCooldown:  baseCooldown,
     }
 }
 
-func (p *Player) Update() {
-    // rotate
-    rotSpeed := math.Pi / float64(ebiten.TPS())
+func (p *Player) Update(difficulty int) {
+    rotSpeed := p.baseRotSpeed * (1 + 0.08*float64(difficulty))
     if ebiten.IsKeyPressed(ebiten.KeyLeft) {
         p.rotation -= rotSpeed
     }
@@ -271,7 +337,8 @@ func (p *Player) Update() {
         p.rotation += rotSpeed
     }
     // thrust
-    speed := 2.0
+    baseSpeed := 2.0
+    speed := baseSpeed * (1 + 0.05*float64(difficulty))
     if ebiten.IsKeyPressed(ebiten.KeyUp) {
         p.position.X += math.Sin(p.rotation) * speed
         p.position.Y -= math.Cos(p.rotation) * speed
@@ -281,6 +348,11 @@ func (p *Player) Update() {
         p.position.Y += math.Cos(p.rotation) * speed
     }
     // shoot
+    newCooldown := p.baseCooldown
+    if difficulty > 0 {
+        newCooldown = time.Duration(float64(p.baseCooldown) * math.Pow(0.92, float64(difficulty)))
+    }
+    p.shootCooldown.targetTicks = int(newCooldown.Seconds() * float64(ebiten.TPS()))
     p.shootCooldown.Update()
     if p.shootCooldown.IsReady() && ebiten.IsKeyPressed(ebiten.KeySpace) {
         p.shootCooldown.Reset()
@@ -324,7 +396,7 @@ type Meteor struct {
     sprite        *ebiten.Image
 }
 
-func NewMeteor() *Meteor {
+func NewMeteor(difficulty int) *Meteor {
     sprite := MeteorSprites[rand.Intn(len(MeteorSprites))]
     // spawn on circle around center
     angle := rand.Float64() * 2 * math.Pi
@@ -332,11 +404,12 @@ func NewMeteor() *Meteor {
     x := ScreenWidth/2 + math.Cos(angle)*r
     y := ScreenHeight/2 + math.Sin(angle)*r
     dir := Vector{X: ScreenWidth/2 - x, Y: ScreenHeight/2 - y}.Normalize()
-    vel := 0.5 + rand.Float64()*1.5
+    baseVel := 0.3 + rand.Float64()*0.7
+    vel := baseVel * (1 + 0.12*float64(difficulty))
     return &Meteor{
         position:      Vector{X: x, Y: y},
         movement:      Vector{X: dir.X * vel, Y: dir.Y * vel},
-        rotationSpeed: -0.02 + rand.Float64()*0.04,
+        rotationSpeed: (-0.02 + rand.Float64()*0.04) * (1 + 0.10*float64(difficulty)),
         sprite:        sprite,
     }
 }
@@ -389,6 +462,7 @@ func (b *Bullet) Update() {
 
 func (b *Bullet) Draw(screen *ebiten.Image) {
     op := &ebiten.DrawImageOptions{}
+    op.GeoM.Scale(0.5, 0.5)
     op.GeoM.Translate(b.position.X, b.position.Y)
     screen.DrawImage(b.sprite, op)
 }
@@ -399,6 +473,34 @@ func (b *Bullet) Collider() Rect {
         float64(bb.Dx()), float64(bb.Dy()))
 }
 
+// Helper function to convert HSV to RGB
+func hsvToRGB(h, s, v float64) (uint8, uint8, uint8) {
+    var r, g, b float64
+    
+    i := math.Floor(h * 6)
+    f := h*6 - i
+    p := v * (1 - s)
+    q := v * (1 - f*s)
+    t := v * (1 - (1-f)*s)
+    
+    switch int(i) % 6 {
+    case 0:
+        r, g, b = v, t, p
+    case 1:
+        r, g, b = q, v, p
+    case 2:
+        r, g, b = p, v, t
+    case 3:
+        r, g, b = p, q, v
+    case 4:
+        r, g, b = t, p, v
+    case 5:
+        r, g, b = v, p, q
+    }
+    
+    return uint8(r * 255), uint8(g * 255), uint8(b * 255)
+}
+
 func main() {
     ebiten.SetWindowSize(ScreenWidth, ScreenHeight)
     ebiten.SetWindowTitle("Starship")
@@ -406,3 +508,4 @@ func main() {
         panic(err)
     }
 }
+
