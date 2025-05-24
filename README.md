@@ -1,6 +1,6 @@
 # Starship Game
 
-I wanted to brush up on my Go skills so I built a fast-paced space shooter game that gets progressively more challenging.
+I wanted to brush up on my Go skills so I built a fast-paced space shooter game that gets progressively more challenging. Play for free below!
 
 **[TRY IT FOR YOURSELF](https://niknahadb.github.io/starship)**
 
