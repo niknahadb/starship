@@ -1,0 +1,47 @@
+name: Build and Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.21"
+
+      - name: Build WebAssembly
+        run: |
+          export GOOS=js
+          export GOARCH=wasm
+          go build -o main.wasm main.go
+
+          # Try to copy wasm_exec.js from Go installation, fallback to download
+          if [ -f "$(go env GOROOT)/misc/wasm/wasm_exec.js" ]; then
+            cp "$(go env GOROOT)/misc/wasm/wasm_exec.js" .
+          else
+            curl -s -o wasm_exec.js https://raw.githubusercontent.com/golang/go/master/misc/wasm/wasm_exec.js
+          fi
+
+      - name: Deploy to GitHub Pages
+        if: github.ref == 'refs/heads/main'
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: .
+          publish_branch: gh-pages
+          keep_files: false
+          include_assets: |
+            index.html
+            main.wasm
+            wasm_exec.js
+            assets/**/*

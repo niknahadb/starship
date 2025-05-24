@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Starship Game</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 20px;
+        background-color: #000;
+        color: #fff;
+        font-family: Arial, sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        min-height: 100vh;
+      }
+
+      h1 {
+        margin-bottom: 10px;
+      }
+
+      .controls {
+        margin-bottom: 20px;
+        text-align: center;
+        max-width: 600px;
+      }
+
+      .control-item {
+        margin: 5px 15px;
+        display: inline-block;
+      }
+
+      #gameContainer {
+        border: 2px solid #333;
+        background-color: #111;
+      }
+
+      .loading {
+        text-align: center;
+        margin: 20px;
+      }
+
+      .error {
+        color: #ff4444;
+        text-align: center;
+        margin: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>🚀 Starship Game</h1>
+
+    <div class="controls">
+      <div class="control-item"><strong>↑/↓:</strong> Thrust</div>
+      <div class="control-item"><strong>←/→:</strong> Rotate</div>
+      <div class="control-item"><strong>Space:</strong> Shoot/Restart</div>
+    </div>
+
+    <div id="gameContainer">
+      <div class="loading" id="loading">Loading game...</div>
+      <div class="error" id="error" style="display: none">
+        Failed to load the game. Please make sure WebAssembly is supported in
+        your browser.
+      </div>
+    </div>
+
+    <script src="wasm_exec.js"></script>
+    <script>
+      async function loadGame() {
+        try {
+          const go = new Go();
+          const result = await WebAssembly.instantiateStreaming(
+            fetch("main.wasm"),
+            go.importObject
+          );
+
+          // Hide loading message
+          document.getElementById("loading").style.display = "none";
+
+          go.run(result.instance);
+        } catch (err) {
+          console.error("Failed to load game:", err);
+          document.getElementById("loading").style.display = "none";
+          document.getElementById("error").style.display = "block";
+        }
+      }
+
+      loadGame();
+    </script>
+  </body>
+</html>
