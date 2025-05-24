@@ -1,14 +1,10 @@
-# 🚀 Starship Game
+# Starship Game
 
-I built a fast-paced space shooter game built to get better at GoLang and have fun along the way.
-
-Navigate your starship through meteor storms and see how long you can survive.
-
-## 🎮 Play Online
+I wanted to brush up on my Go skills so I built a fast-paced space shooter game that gets progressively more challenging.
 
 **[Play the game here!](https://niknahadb.github.io/starship)**
 
-## 🎯 How to Play
+## How to Play
 
 - **↑/↓ Arrow Keys**: Thrust forward/backward
 - **←/→ Arrow Keys**: Rotate your ship
@@ -17,7 +13,7 @@ Navigate your starship through meteor storms and see how long you can survive.
 
 The game gets progressively harder - meteors spawn faster and move quicker as your score increases.
 
-## 🔧 Key Learnings and Takeaways
+## Key Learnings and Takeaways
 
 This project reinforced my appreciation for Go’s strengths in systems-level programming and real time application design. Embedding game assets with the `embed` package not only simplified distribution packaging images, audio, and fonts directly into the binary, but also removed runtime I/O complexity, letting me focus on core gameplay logic rather than file path management.
 
