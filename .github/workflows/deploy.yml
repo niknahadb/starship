@@ -40,8 +40,3 @@ jobs:
           publish_dir: .
           publish_branch: gh-pages
           keep_files: false
-          include_assets: |
-            index.html
-            main.wasm
-            wasm_exec.js
-            assets/**/*
