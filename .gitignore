@@ -1,7 +1,3 @@
-# Build artifacts
-main.wasm
-wasm_exec.js
-
 # Go build cache
 *.exe
 *.exe~
