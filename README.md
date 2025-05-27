@@ -2,7 +2,7 @@
 
 I wanted to brush up on my Go skills so I built a fast-paced space shooter game that gets progressively more challenging. Play for free below!
 
-**[TRY IT FOR YOURSELF](https://niknahadb.github.io/starship)**
+**[TRY IT FOR YOURSELF HERE](https://niknahadb.github.io/starship)**
 
 ## How to Play
 
